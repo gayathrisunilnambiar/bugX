@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+sentinel-report.md
+sentinel-trace.json
+fixtures/test-trace.json
+fixtures/.sentinel-worktrees/
+.venv/
+.readme-venv/
+*.egg-info/

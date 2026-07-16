@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinel-bisect"
+version = "0.1.0"
+description = "Flaky-test-aware regression finder"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["click>=8.1", "openai>=1.0", "python-dotenv>=1.0"]
+
+[project.scripts]
+sentinel-bisect = "sentinel_bisect.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["sentinel_bisect*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

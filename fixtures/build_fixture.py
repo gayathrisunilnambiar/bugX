@@ -5,10 +5,34 @@ import os
 import shutil
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent / "flaky-regression-demo"
 COMMIT_INDEX = 0
+
+
+def _remove_tree(target: Path, attempts: int = 6) -> None:
+    """Delete a git worktree tree robustly. Git marks packed/object files read-only,
+    and on Windows/WSL a just-finished process (a disposable worktree, pytest, the
+    flaky marker) can briefly hold a handle so removal fails with PermissionError.
+    Clear the read-only bit on each failure and retry the whole removal a few times
+    with a short backoff, so regenerating the fixture in quick succession is reliable.
+    """
+    def clear_readonly(action: object, path: str, _exc: object) -> None:
+        Path(path).chmod(stat.S_IWRITE)
+        action(path)  # type: ignore[operator]
+
+    for attempt in range(attempts):
+        try:
+            shutil.rmtree(target, onerror=clear_readonly)
+            return
+        except OSError:
+            if attempt == attempts - 1 or not target.exists():
+                if not target.exists():
+                    return
+                raise
+            time.sleep(0.3)
 
 
 def run(*args: str) -> None:
@@ -36,11 +60,7 @@ def main() -> None:
     global COMMIT_INDEX
     COMMIT_INDEX = 0
     if ROOT.exists():
-        # Git may mark packed/object files read-only on Windows.
-        def make_writable(action: object, path: str, exc: object) -> None:
-            Path(path).chmod(stat.S_IWRITE)
-            action(path)  # type: ignore[operator]
-        shutil.rmtree(ROOT, onerror=make_writable)
+        _remove_tree(ROOT)
     ROOT.mkdir(parents=True)
     run("git", "init")
     run("git", "config", "user.email", "demo@example.test")

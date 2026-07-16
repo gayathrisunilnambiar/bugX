@@ -40,11 +40,14 @@ def build_comment(trace: dict, repo: Path, run_url: str | None, artifact_name: s
     lines.append(
         f"Searched {len(steps)} decision point(s); {flaky_count} flaky, {substitution_count} routed around via substitution."
     )
-    lines.append("")
+    links = []
     if artifact_name:
-        lines.append(f"Full Markdown report, JSON trace, and HTML timeline are attached as the `{artifact_name}` workflow artifact.")
+        links.append(f"Full Markdown report, JSON trace, and HTML timeline are attached as the `{artifact_name}` workflow artifact.")
     if run_url:
-        lines.append(f"[View workflow run]({run_url})")
+        links.append(f"[View workflow run]({run_url})")
+    if links:
+        lines.append("")
+        lines.extend(links)
     lines.append("")
     lines.append("<sub>Posted automatically by the `sentinel-bisect` GitHub Action.</sub>")
     return "\n".join(lines)

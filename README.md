@@ -141,9 +141,13 @@ Use `--serve-port` to change the port (default `8787`) and `--runs-dir` to chang
 - `verify/`: applies the suggested patch in the temporary worktree and repeats the target/smoke commands.
 - `report/`: creates a Markdown report and an HTML timeline visualization with a demo-friendly search timeline, and (via `--serve`) a small FastAPI server that serves them over HTTP.
 
-## Built with Codex
+## Built with Codex and Claude Code
 
-Codex accelerated the project scaffold, test fixture generator, typed module boundaries, CLI wiring, and unit tests. The core confidence policy and small demo history were deliberately hand-tuned for easy explanation in a three-minute walkthrough. GPT-5.6 is reserved for two judgment-heavy tasks: extracting structured reproduction intent from raw reports, and interpreting a *confirmed* diff plus failure output into an explanation and minimal patch. It does not make bisection decisions.
+**Codex** accelerated the project scaffold, test fixture generator, typed module boundaries, CLI wiring, and unit tests. The core confidence policy and small demo history were deliberately hand-tuned for easy explanation in a three-minute walkthrough.
+
+**Claude Code** hardened and extended the implementation with cross-platform setup documentation, OPENAI_API_KEY error handling with clear messages, the escalation tiers and adaptive rerun schedule, flaky-commit routing via substitution, the self-contained HTML timeline visualization served over HTTP, minimal GitHub Actions CI integration, and comprehensive edge-case handling (no regression, flaky baseline, command failures, empty ranges).
+
+GPT-5.6 is reserved for two judgment-heavy tasks: extracting structured reproduction intent from raw reports, and interpreting a *confirmed* diff plus failure output into an explanation and minimal patch. It does not make bisection decisions.
 
 ## Edge cases
 

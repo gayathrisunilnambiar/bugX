@@ -12,20 +12,23 @@ Sentinel's key distinction is that it establishes a repeatable signal while sear
 
 ### Proof: flaky disambiguation in action
 
-The checked-in [demo trace](fixtures/demo-trace.json) is produced by regenerating the included fixture and running the documented command with three attempts per candidate. The fixture places the unrelated intermittent probe at the deterministic first midpoint. This excerpt is from that run; its `untrusted_flaky` decision means the commit was explicitly excluded from the bisection boundary and a stable neighboring commit was probed instead.
+The checked-in [demo trace](fixtures/demo-trace.json) is produced by regenerating the included fixture and running the documented command with three attempts per candidate. The fixture places the unrelated intermittent probe at the deterministic first midpoint. This excerpt is from that run; its `untrusted_flaky` decision means the commit could not be trusted to select a bisection branch. Rather than stopping, Sentinel routes around it: the very next trace step (see `substitute_for` below) is a stable adjacent commit that stands in as the decision point so the search keeps going. The `escalation` array records each rerun tier and its outcomes; here the single documented tier of 3 was still mixed, so the commit was routed around.
 
 ```json
 {
   "commit": "1b1e9dca495f3f2da53b30babf4b890eb59b3a70",
   "classification": "flaky",
   "attempt_count": 3,
-  "outcomes": [
-    "fail",
-    "pass",
-    "fail"
+  "outcomes": ["fail", "pass", "fail"],
+  "escalation": [
+    { "runs": 3, "classification": "flaky", "outcomes": ["fail", "pass", "fail"] }
   ],
   "decision": "untrusted_flaky",
+  "substitute_for": null
+}
 ```
+
+The following step in the trace carries `"decision": "substituted_pass"` and `"substitute_for": "1b1e9dca…"`, marking the adjacent commit that was used in place of the flaky one.
 
 ## Setup
 
@@ -105,8 +108,8 @@ Codex accelerated the project scaffold, test fixture generator, typed module bou
 
 ## Known limitations
 
-- Flaky detection is based on a configurable rerun count (default: 3), not a formal statistical model.
-- A persistently flaky midpoint stops the search for human guidance rather than skipping history and claiming certainty.
+- Flaky detection uses an adaptive rerun schedule, not a formal statistical model: a candidate is classified as soon as one tier's batch of runs is unanimous (all pass or all fail), escalating to a larger, independent batch only when a tier is mixed. The schedule defaults to `3,7,15` and is configurable via `--rerun-schedule`; `--runs N` remains available as shorthand for a fixed, non-escalating single-tier schedule.
+- A persistently flaky midpoint does not stop the search: Sentinel first escalates its rerun count, and if the signal still will not resolve it routes around the commit by substituting an adjacent commit as the decision point (recorded in the trace as `substitute_for`). The search only halts for human guidance in the rare case where every commit in the remaining range is persistently flaky.
 - The fixture demonstrates Python/pytest; test commands themselves are shell commands and can target other stacks.
 - Patch generation needs an OpenAI API key and can decline to produce a safe patch.
 - Dependency and cross-repository bisection are intentionally outside this MVP.

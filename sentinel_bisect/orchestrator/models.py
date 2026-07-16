@@ -38,12 +38,29 @@ class Attempt:
 
 
 @dataclass(frozen=True)
+class TierAttempt:
+    """One escalation tier: how many reruns were attempted and how they landed."""
+
+    runs: int
+    classification: Classification
+    outcomes: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {"runs": self.runs, "classification": self.classification, "outcomes": self.outcomes}
+
+
+@dataclass(frozen=True)
 class TrialResult:
     classification: Classification
     attempts: list[Attempt]
+    escalation: list[TierAttempt] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
-        return {"classification": self.classification, "attempts": [asdict(a) for a in self.attempts]}
+        return {
+            "classification": self.classification,
+            "attempts": [asdict(a) for a in self.attempts],
+            "escalation": [tier.to_dict() for tier in self.escalation],
+        }
 
 
 @dataclass(frozen=True)
@@ -55,6 +72,8 @@ class TraceStep:
     retry: int = 0
     decision: str = "trusted"
     outcomes: list[str] = field(default_factory=list)
+    escalation: list[TierAttempt] = field(default_factory=list)
+    substitute_for: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         # Keep the classification evidence together at the top of JSON traces;
@@ -66,5 +85,11 @@ class TraceStep:
             "outcomes": self.outcomes,
             "decision": self.decision,
             "retry": self.retry,
+            # Per-tier escalation history so readers can see a flaky commit being
+            # re-run at larger rerun counts before it resolved (or stayed flaky).
+            "escalation": [tier.to_dict() for tier in self.escalation],
+            # Set when this commit stood in for a persistently-flaky decision point
+            # that the search routed around.
+            "substitute_for": self.substitute_for,
             "outputs": self.outputs,
         }

@@ -12,27 +12,22 @@
       ],
       "decision": "untrusted_flaky",
       "retry": 0,
-      "outputs": [
-        "..F                                                                      [100%]\n================================== FAILURES ===================================\n______________________ test_unrelated_intermittent_probe ______________________\n\n    def test_unrelated_intermittent_probe():\n        # A state-leak test: consecutive process runs alternate fail/pass. It is\n        # unrelated to parse_total and deliberately guarantees a mixed demo trace.\n        marker = Path('.sentinel-flaky-marker')\n        if marker.exists():\n            marker.unlink()\n        else:\n            marker.write_text('state leaked', encoding='utf-8')\n>           raise AssertionError('unrelated intermittent probe')\nE           AssertionError: unrelated intermittent probe\n\ntests\\test_calculator.py:19: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_calculator.py::test_unrelated_intermittent_probe - Assertio...\n1 failed, 2 passed in 1.51s\n",
-        "...                                                                      [100%]\n3 passed in 0.05s\n",
-        "..F                                                                      [100%]\n================================== FAILURES ===================================\n______________________ test_unrelated_intermittent_probe ______________________\n\n    def test_unrelated_intermittent_probe():\n        # A state-leak test: consecutive process runs alternate fail/pass. It is\n        # unrelated to parse_total and deliberately guarantees a mixed demo trace.\n        marker = Path('.sentinel-flaky-marker')\n        if marker.exists():\n            marker.unlink()\n        else:\n            marker.write_text('state leaked', encoding='utf-8')\n>           raise AssertionError('unrelated intermittent probe')\nE           AssertionError: unrelated intermittent probe\n\ntests\\test_calculator.py:19: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_calculator.py::test_unrelated_intermittent_probe - Assertio...\n1 failed, 2 passed in 1.67s\n"
-      ]
-    },
-    {
-      "commit": "1b1e9dca495f3f2da53b30babf4b890eb59b3a70",
-      "classification": "flaky",
-      "attempt_count": 3,
-      "outcomes": [
-        "fail",
-        "pass",
-        "fail"
+      "escalation": [
+        {
+          "runs": 3,
+          "classification": "flaky",
+          "outcomes": [
+            "fail",
+            "pass",
+            "fail"
+          ]
+        }
       ],
-      "decision": "untrusted_flaky",
-      "retry": 1,
+      "substitute_for": null,
       "outputs": [
-        "..F                                                                      [100%]\n================================== FAILURES ===================================\n______________________ test_unrelated_intermittent_probe ______________________\n\n    def test_unrelated_intermittent_probe():\n        # A state-leak test: consecutive process runs alternate fail/pass. It is\n        # unrelated to parse_total and deliberately guarantees a mixed demo trace.\n        marker = Path('.sentinel-flaky-marker')\n        if marker.exists():\n            marker.unlink()\n        else:\n            marker.write_text('state leaked', encoding='utf-8')\n>           raise AssertionError('unrelated intermittent probe')\nE           AssertionError: unrelated intermittent probe\n\ntests\\test_calculator.py:19: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_calculator.py::test_unrelated_intermittent_probe - Assertio...\n1 failed, 2 passed in 1.67s\n",
-        "...                                                                      [100%]\n3 passed in 0.06s\n",
-        "..F                                                                      [100%]\n================================== FAILURES ===================================\n______________________ test_unrelated_intermittent_probe ______________________\n\n    def test_unrelated_intermittent_probe():\n        # A state-leak test: consecutive process runs alternate fail/pass. It is\n        # unrelated to parse_total and deliberately guarantees a mixed demo trace.\n        marker = Path('.sentinel-flaky-marker')\n        if marker.exists():\n            marker.unlink()\n        else:\n            marker.write_text('state leaked', encoding='utf-8')\n>           raise AssertionError('unrelated intermittent probe')\nE           AssertionError: unrelated intermittent probe\n\ntests\\test_calculator.py:19: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_calculator.py::test_unrelated_intermittent_probe - Assertio...\n1 failed, 2 passed in 1.73s\n"
+        "..F                                                                      [100%]\n=================================== FAILURES ===================================\n______________________ test_unrelated_intermittent_probe _______________________\n\n    def test_unrelated_intermittent_probe():\n        # A state-leak test: consecutive process runs alternate fail/pass. It is\n        # unrelated to parse_total and deliberately guarantees a mixed demo trace.\n        marker = Path('.sentinel-flaky-marker')\n        if marker.exists():\n            marker.unlink()\n        else:\n            marker.write_text('state leaked', encoding='utf-8')\n>           raise AssertionError('unrelated intermittent probe')\nE           AssertionError: unrelated intermittent probe\n\ntests/test_calculator.py:19: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_calculator.py::test_unrelated_intermittent_probe - Assertio...\n1 failed, 2 passed in 0.88s\n",
+        "...                                                                      [100%]\n3 passed in 0.40s\n",
+        "..F                                                                      [100%]\n=================================== FAILURES ===================================\n______________________ test_unrelated_intermittent_probe _______________________\n\n    def test_unrelated_intermittent_probe():\n        # A state-leak test: consecutive process runs alternate fail/pass. It is\n        # unrelated to parse_total and deliberately guarantees a mixed demo trace.\n        marker = Path('.sentinel-flaky-marker')\n        if marker.exists():\n            marker.unlink()\n        else:\n            marker.write_text('state leaked', encoding='utf-8')\n>           raise AssertionError('unrelated intermittent probe')\nE           AssertionError: unrelated intermittent probe\n\ntests/test_calculator.py:19: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_calculator.py::test_unrelated_intermittent_probe - Assertio...\n1 failed, 2 passed in 0.51s\n"
       ]
     },
     {
@@ -44,12 +39,24 @@
         "pass",
         "pass"
       ],
-      "decision": "trusted_pass_after_flaky",
+      "decision": "substituted_pass",
       "retry": 0,
+      "escalation": [
+        {
+          "runs": 3,
+          "classification": "pass",
+          "outcomes": [
+            "pass",
+            "pass",
+            "pass"
+          ]
+        }
+      ],
+      "substitute_for": "1b1e9dca495f3f2da53b30babf4b890eb59b3a70",
       "outputs": [
-        "...                                                                      [100%]\n3 passed in 0.09s\n",
-        "...                                                                      [100%]\n3 passed in 0.05s\n",
-        "...                                                                      [100%]\n3 passed in 0.05s\n"
+        "...                                                                      [100%]\n3 passed in 0.22s\n",
+        "...                                                                      [100%]\n3 passed in 0.36s\n",
+        "...                                                                      [100%]\n3 passed in 0.44s\n"
       ]
     },
     {
@@ -63,10 +70,22 @@
       ],
       "decision": "trusted_fail",
       "retry": 0,
+      "escalation": [
+        {
+          "runs": 3,
+          "classification": "fail",
+          "outcomes": [
+            "fail",
+            "fail",
+            "fail"
+          ]
+        }
+      ],
+      "substitute_for": null,
       "outputs": [
-        "F.F                                                                      [100%]\n================================== FAILURES ===================================\n______________________________ test_parse_total _______________________________\n\n    def test_parse_total():\n>       assert parse_total('1, 2, 3') == 6\nE       AssertionError: assert 1 == 6\nE        +  where 1 = parse_total('1, 2, 3')\n\ntests\\test_calculator.py:4: AssertionError\n_______________________________ test_whitespace _______________________________\n\n    def test_whitespace():\n>       assert parse_total('4, 5') == 9\nE       AssertionError: assert 4 == 9\nE        +  where 4 = parse_total('4, 5')\n\ntests\\test_calculator.py:10: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_calculator.py::test_parse_total - AssertionError: assert 1 ...\nFAILED tests/test_calculator.py::test_whitespace - AssertionError: assert 4 == 9\n2 failed, 1 passed in 1.37s\n",
-        "F.F                                                                      [100%]\n================================== FAILURES ===================================\n______________________________ test_parse_total _______________________________\n\n    def test_parse_total():\n>       assert parse_total('1, 2, 3') == 6\nE       AssertionError: assert 1 == 6\nE        +  where 1 = parse_total('1, 2, 3')\n\ntests\\test_calculator.py:4: AssertionError\n_______________________________ test_whitespace _______________________________\n\n    def test_whitespace():\n>       assert parse_total('4, 5') == 9\nE       AssertionError: assert 4 == 9\nE        +  where 4 = parse_total('4, 5')\n\ntests\\test_calculator.py:10: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_calculator.py::test_parse_total - AssertionError: assert 1 ...\nFAILED tests/test_calculator.py::test_whitespace - AssertionError: assert 4 == 9\n2 failed, 1 passed in 1.24s\n",
-        "F.F                                                                      [100%]\n================================== FAILURES ===================================\n______________________________ test_parse_total _______________________________\n\n    def test_parse_total():\n>       assert parse_total('1, 2, 3') == 6\nE       AssertionError: assert 1 == 6\nE        +  where 1 = parse_total('1, 2, 3')\n\ntests\\test_calculator.py:4: AssertionError\n_______________________________ test_whitespace _______________________________\n\n    def test_whitespace():\n>       assert parse_total('4, 5') == 9\nE       AssertionError: assert 4 == 9\nE        +  where 4 = parse_total('4, 5')\n\ntests\\test_calculator.py:10: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_calculator.py::test_parse_total - AssertionError: assert 1 ...\nFAILED tests/test_calculator.py::test_whitespace - AssertionError: assert 4 == 9\n2 failed, 1 passed in 1.50s\n"
+        "F.F                                                                      [100%]\n=================================== FAILURES ===================================\n_______________________________ test_parse_total _______________________________\n\n    def test_parse_total():\n>       assert parse_total('1, 2, 3') == 6\nE       AssertionError: assert 1 == 6\nE        +  where 1 = parse_total('1, 2, 3')\n\ntests/test_calculator.py:4: AssertionError\n_______________________________ test_whitespace ________________________________\n\n    def test_whitespace():\n>       assert parse_total('4, 5') == 9\nE       AssertionError: assert 4 == 9\nE        +  where 4 = parse_total('4, 5')\n\ntests/test_calculator.py:10: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_calculator.py::test_parse_total - AssertionError: assert 1 ...\nFAILED tests/test_calculator.py::test_whitespace - AssertionError: assert 4 == 9\n2 failed, 1 passed in 0.88s\n",
+        "F.F                                                                      [100%]\n=================================== FAILURES ===================================\n_______________________________ test_parse_total _______________________________\n\n    def test_parse_total():\n>       assert parse_total('1, 2, 3') == 6\nE       AssertionError: assert 1 == 6\nE        +  where 1 = parse_total('1, 2, 3')\n\ntests/test_calculator.py:4: AssertionError\n_______________________________ test_whitespace ________________________________\n\n    def test_whitespace():\n>       assert parse_total('4, 5') == 9\nE       AssertionError: assert 4 == 9\nE        +  where 4 = parse_total('4, 5')\n\ntests/test_calculator.py:10: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_calculator.py::test_parse_total - AssertionError: assert 1 ...\nFAILED tests/test_calculator.py::test_whitespace - AssertionError: assert 4 == 9\n2 failed, 1 passed in 0.71s\n",
+        "F.F                                                                      [100%]\n=================================== FAILURES ===================================\n_______________________________ test_parse_total _______________________________\n\n    def test_parse_total():\n>       assert parse_total('1, 2, 3') == 6\nE       AssertionError: assert 1 == 6\nE        +  where 1 = parse_total('1, 2, 3')\n\ntests/test_calculator.py:4: AssertionError\n_______________________________ test_whitespace ________________________________\n\n    def test_whitespace():\n>       assert parse_total('4, 5') == 9\nE       AssertionError: assert 4 == 9\nE        +  where 4 = parse_total('4, 5')\n\ntests/test_calculator.py:10: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_calculator.py::test_parse_total - AssertionError: assert 1 ...\nFAILED tests/test_calculator.py::test_whitespace - AssertionError: assert 4 == 9\n2 failed, 1 passed in 0.49s\n"
       ]
     },
     {
@@ -80,10 +99,22 @@
       ],
       "decision": "trusted_pass",
       "retry": 0,
+      "escalation": [
+        {
+          "runs": 3,
+          "classification": "pass",
+          "outcomes": [
+            "pass",
+            "pass",
+            "pass"
+          ]
+        }
+      ],
+      "substitute_for": null,
       "outputs": [
-        "...                                                                      [100%]\n3 passed in 0.09s\n",
-        "...                                                                      [100%]\n3 passed in 0.04s\n",
-        "...                                                                      [100%]\n3 passed in 0.05s\n"
+        "...                                                                      [100%]\n3 passed in 0.52s\n",
+        "...                                                                      [100%]\n3 passed in 0.14s\n",
+        "...                                                                      [100%]\n3 passed in 0.34s\n"
       ]
     }
   ]

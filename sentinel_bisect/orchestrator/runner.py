@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import Sequence
 
-from .models import Attempt, Classification, TrialResult
+from .models import Attempt, Classification, TierAttempt, TrialResult
 
 
 def classify_attempts(attempts: list[Attempt]) -> Classification:
@@ -45,9 +45,15 @@ def run_command_with_schedule(command: str, cwd: Path, rerun_schedule: Sequence[
     if not rerun_schedule:
         raise ValueError("rerun_schedule must contain at least one tier")
     attempts: list[Attempt] = []
+    escalation: list[TierAttempt] = []
     for tier in rerun_schedule:
         attempts = [_run_once(command, cwd) for _ in range(tier)]
         classification = classify_attempts(attempts)
+        escalation.append(TierAttempt(
+            runs=tier,
+            classification=classification,
+            outcomes=["pass" if a.passed else "fail" for a in attempts],
+        ))
         if classification != Classification.FLAKY:
-            return TrialResult(classification=classification, attempts=attempts)
-    return TrialResult(classification=Classification.FLAKY, attempts=attempts)
+            return TrialResult(classification=classification, attempts=attempts, escalation=escalation)
+    return TrialResult(classification=Classification.FLAKY, attempts=attempts, escalation=escalation)

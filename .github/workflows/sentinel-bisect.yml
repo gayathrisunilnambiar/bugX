@@ -1,0 +1,89 @@
+# Runs Sentinel Bisect on demand and posts the result as a PR comment.
+#
+# Scope tradeoff: reliably reacting to "a PR's CI check failed" requires
+# correlating a workflow_run completion event back to the right PR, head SHA,
+# and the specific failing check's reproduction command — that mapping is
+# CI-config-specific and easy to get subtly wrong. For this MVP we trigger via
+# workflow_dispatch instead: a human (or a thin follow-up automation) supplies
+# the PR number, the known-good/known-bad commits, and the failing command.
+# This keeps the integration honest and demoable rather than automatic and
+# fragile. Wiring a real `workflow_run` trigger is a natural next step once
+# there's a concrete CI setup to target.
+name: Sentinel Bisect
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to comment on"
+        required: true
+      good:
+        description: "Known-good commit (last commit before the regression)"
+        required: true
+      bad:
+        description: "Known-bad commit (defaults to the PR head if left as HEAD)"
+        required: true
+        default: "HEAD"
+      command:
+        description: "Shell command that reproduces the regression"
+        required: true
+
+jobs:
+  bisect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # Bisection needs full history to walk commits between good and bad.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Sentinel Bisect
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run bisection
+        run: |
+          sentinel-bisect \
+            --repo . \
+            --command "${{ github.event.inputs.command }}" \
+            --good "${{ github.event.inputs.good }}" \
+            --bad "${{ github.event.inputs.bad }}" \
+            --report-file sentinel-report.md \
+            --trace-file sentinel-trace.json
+
+      - name: Upload report and trace as workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-bisect-report
+          path: |
+            sentinel-report.md
+            sentinel-trace.json
+          if-no-files-found: warn
+
+      - name: Post PR comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f sentinel-trace.json ]; then
+            python scripts/post_pr_comment.py \
+              --trace-file sentinel-trace.json \
+              --repo . \
+              --pr-number "${{ github.event.inputs.pr_number }}" \
+              --github-repo "${{ github.repository }}" \
+              --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              --artifact-name sentinel-bisect-report
+          else
+            echo "No trace file produced; skipping PR comment." >&2
+          fi

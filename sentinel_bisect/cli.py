@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from sentinel_bisect.analysis import MissingApiKeyError, analyze_culprit
 from sentinel_bisect.intake import derive_intent
-from sentinel_bisect.orchestrator.engine import BisectEngine, UnresolvedFlakyCommit
+from sentinel_bisect.orchestrator.engine import BisectEngine, BisectionError
 from sentinel_bisect.orchestrator.git import disposable_worktree, git
 from sentinel_bisect.orchestrator.models import DEFAULT_RERUN_SCHEDULE, parse_rerun_schedule
 from sentinel_bisect.report import render_markdown
@@ -84,7 +84,7 @@ def main(
         schedule = DEFAULT_RERUN_SCHEDULE
     try:
         result = BisectEngine(repo, command, rerun_schedule=schedule).search(good, bad, trace_file)
-    except UnresolvedFlakyCommit as exc:
+    except BisectionError as exc:
         raise click.ClickException(str(exc)) from exc
     try:
         analysis = analyze_culprit(repo, result.culprit, result.trace[-1].outputs[-1]) if analyze else None

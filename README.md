@@ -117,6 +117,22 @@ The timeline is a self-contained page (no CDN dependencies) with a green/red/amb
 
 Use `--serve-port` to change the port (default `8787`) and `--runs-dir` to change where per-run trace files are kept for the server to discover (default `sentinel-runs/`).
 
+## CI Integration
+
+[`.github/workflows/sentinel-bisect.yml`](.github/workflows/sentinel-bisect.yml) runs Sentinel Bisect in GitHub Actions and posts a compact summary as a PR comment — a minimal demonstration of the integration pattern, not a full product.
+
+**Trigger:** manual `workflow_dispatch` only, with four inputs: `pr_number`, `good`, `bad`, and `command`. **This is a deliberate MVP simplification.** Automatically reacting to "a PR's CI check failed" would require correlating a `workflow_run` completion event back to the right PR, head SHA, and the specific failing check's reproduction command — a mapping that's specific to each repo's CI setup and easy to get subtly wrong within a short build. Manual dispatch keeps the demo honest: you supply the known-good/known-bad commits and the failing command, same as running `sentinel-bisect` locally.
+
+**What it requires:** nothing beyond the repository's default `GITHUB_TOKEN` (used to post the comment via `gh pr comment`; no extra secrets to configure). No `OPENAI_API_KEY` is needed — the workflow only runs the offline bisection, not `--analyze`/`--verify`.
+
+**What it does:**
+1. Checks out full history and installs Sentinel Bisect (`pip install -e .`).
+2. Runs `sentinel-bisect --good <good> --bad <bad> --command <command>`.
+3. Uploads `sentinel-report.md` and `sentinel-trace.json` as a workflow artifact (the full report; `--serve`'s HTML timeline isn't started in CI since there's no long-lived server in a GitHub Actions job — the JSON trace is uploaded instead so it can be inspected or rendered locally with `--serve`).
+4. Runs [`scripts/post_pr_comment.py`](scripts/post_pr_comment.py), which reads the trace and posts a short summary — the introducing commit, one line of counts (flaky/substituted decision points), and a link to the workflow run/artifact — as a PR comment via the `gh` CLI (preinstalled on GitHub-hosted runners, so no third-party comment-posting Action is needed).
+
+**Current limitations:** manual dispatch only (no automatic trigger on CI failure); posts to whatever `pr_number` you provide (not derived from the run); does not run `--analyze`/`--verify`, so the comment never includes a proposed patch.
+
 ## Architecture
 
 - `intake/`: turns a bug report into a command and revision intent; GPT-5.6 is optional with an offline heuristic fallback.
@@ -128,6 +144,16 @@ Use `--serve-port` to change the port (default `8787`) and `--runs-dir` to chang
 ## Built with Codex
 
 Codex accelerated the project scaffold, test fixture generator, typed module boundaries, CLI wiring, and unit tests. The core confidence policy and small demo history were deliberately hand-tuned for easy explanation in a three-minute walkthrough. GPT-5.6 is reserved for two judgment-heavy tasks: extracting structured reproduction intent from raw reports, and interpreting a *confirmed* diff plus failure output into an explanation and minimal patch. It does not make bisection decisions.
+
+## Edge cases
+
+Before searching, Sentinel verifies the range boundaries (the good commit must consistently pass, the bad commit must consistently fail) so it never returns a misleading culprit or crashes on input that doesn't actually describe a regression. Expected behavior when a judge tests with their own input:
+
+- **No regression in the range** (the bad commit passes, same as good): reports "No regression found in the given range" and exits non-zero — it does not invent a culprit.
+- **Flaky baseline** (the good/starting commit is itself flaky): reports "Cannot establish a reliable baseline: the good baseline … is flaky" rather than searching from an untrustworthy anchor. A flaky bad commit is reported the same way.
+- **Good baseline already fails** (regression predates the range, or a misconfigured command): reports that the good baseline already fails and suggests picking an earlier good commit or checking the command.
+- **Reproduction command can't run** (typo'd command / not found, exit code 126–127 at the first commit checked): reports "The reproduction command failed to run … (e.g. command not found)", distinguishing a command/environment problem from a genuine test failure. (A command that runs but errors for another reason — e.g. a wrong test *path* returning a non-127 code — surfaces as the "good baseline already fails" message above.)
+- **Single-commit range** (good and bad adjacent): handled as a valid trivial case — the one commit is the culprit, and its pass/fail anchors are actually verified, with no off-by-one crash. **Empty range** (good and bad are the same commit or reversed) is reported as "the range is empty" rather than a stack trace.
 
 ## Known limitations
 

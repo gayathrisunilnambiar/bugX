@@ -14,9 +14,32 @@ from .runner import run_command_with_schedule
 LOG = logging.getLogger(__name__)
 
 
-class UnresolvedFlakyCommit(RuntimeError):
+class BisectionError(RuntimeError):
+    """Base for conditions that abort a search with a clear, user-facing explanation
+    rather than returning a misleading culprit or crashing with a stack trace."""
+
+
+class UnresolvedFlakyCommit(BisectionError):
     """Raised only when a flaky decision point cannot be routed around because the
     entire remaining search range is persistently flaky — a rare terminal state."""
+
+
+class NoRegressionFound(BisectionError):
+    """The bad commit passes the reproduction command: there is nothing to bisect."""
+
+
+class UnreliableBaseline(BisectionError):
+    """A good/bad anchor could not be trusted (flaky, or good already fails), so the
+    search has no dependable boundary to bisect between."""
+
+
+class ReproductionCommandError(BisectionError):
+    """The reproduction command could not be executed (e.g. command not found): an
+    environment/command problem rather than a genuine test failure."""
+
+
+class EmptyRange(BisectionError):
+    """The good..bad range contains no commits (good and bad are the same or reversed)."""
 
 
 def _make_run_id(culprit: str | None) -> str:
@@ -93,9 +116,32 @@ class BisectEngine:
                 return
             offset += 1
 
+    @staticmethod
+    def _command_run_error(trial: TrialResult) -> bool:
+        """True when every attempt exited 126/127 — the shell could not run the
+        command (not executable / not found), an environment problem rather than a
+        genuine test failure that should steer the search."""
+        return bool(trial.attempts) and all(a.returncode in (126, 127) for a in trial.attempts)
+
     def search(self, good: str, bad: str, trace_path: Path | None = None) -> BisectResult:
-        commits = self._commits(good, bad)
+        try:
+            commits = self._commits(good, bad)
+        except ValueError as exc:
+            raise EmptyRange(
+                f"No commits to search between {good!r} and {bad!r}: the range is empty. "
+                "good and bad may be the same commit, or reversed — provide a good commit that is an "
+                "ancestor of a distinct bad commit."
+            ) from exc
+
         trace: list[TraceStep] = []
+        # Anchor verification. The binary search below assumes good truly passes and
+        # bad truly fails; it never revisits them. Verify both first so we never
+        # report a misleading culprit for a range with no regression, search from an
+        # untrustworthy (flaky) baseline, or mistake a broken command for a failure.
+        self._verify_anchor(good, "baseline", trace, trace_path)
+        bad_rev = commits[-1]
+        self._verify_anchor(bad_rev, "anchor", trace, trace_path)
+
         low, high = -1, len(commits) - 1
         while high - low > 1:
             index = (low + high) // 2
@@ -108,6 +154,43 @@ class BisectEngine:
         run_id = _make_run_id(culprit)
         self._write_trace(trace, trace_path, culprit, run_id)
         return BisectResult(culprit=culprit, trace=trace, run_id=run_id)
+
+    def _verify_anchor(self, revision: str, role: str, trace: list[TraceStep], trace_path: Path | None) -> None:
+        """Test a good ('baseline') or bad ('anchor') boundary commit and abort with a
+        clear error if it cannot be trusted. good must consistently pass; bad must
+        consistently fail. Either being flaky, or the command failing to run, or a
+        good that already fails / a bad that already passes, is reported explicitly."""
+        trial = self._trial(revision)
+        trace.append(self._step(revision, trial, f"{role}_{trial.classification}"))
+        LOG.info("%s %s: %s", role, revision[:12], trial.classification)
+
+        if self._command_run_error(trial):
+            self._write_trace(trace, trace_path)
+            raise ReproductionCommandError(
+                f"The reproduction command failed to run at {revision[:12]} "
+                f"(exit code {trial.attempts[-1].returncode}, e.g. command not found). This is a "
+                "command/environment problem, not a test failure — check the command and try again."
+            )
+        if trial.classification == Classification.FLAKY:
+            self._write_trace(trace, trace_path)
+            noun = "good baseline" if role == "baseline" else "bad commit"
+            raise UnreliableBaseline(
+                f"Cannot establish a reliable baseline: the {noun} {revision[:12]} is flaky (its result is "
+                "not consistent across reruns). Bisection needs trustworthy passing and failing anchors."
+            )
+        if role == "baseline" and trial.classification == Classification.FAIL:
+            self._write_trace(trace, trace_path)
+            raise UnreliableBaseline(
+                f"The good baseline {revision[:12]} already fails the reproduction command. The regression "
+                "may predate this range, or the command may be misconfigured (e.g. a wrong test path). Pick "
+                "an earlier good commit, or check the command."
+            )
+        if role == "anchor" and trial.classification == Classification.PASS:
+            self._write_trace(trace, trace_path)
+            raise NoRegressionFound(
+                f"No regression found in the given range: the bad commit {revision[:12]} passes the "
+                "reproduction command, the same outcome as the good baseline. There is nothing to bisect."
+            )
 
     def _decide(
         self,

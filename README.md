@@ -94,13 +94,36 @@ sentinel-bisect --repo fixtures/flaky-regression-demo --command "pytest -q tests
 
 The proposed patch is applied only inside a disposable worktree at the culprit revision. Sentinel runs the focused target repeatedly and reports verification only when every run passes.
 
+### Visual timeline (`--serve`)
+
+The Markdown report and JSON trace are also available as a colored HTML timeline over HTTP — the same flaky-disambiguation moment shown in the "Proof" section above, but rendered visually instead of as a JSON excerpt. Pass `--serve` and, once the bisection finishes, Sentinel starts a local server and prints the URL to open:
+
+```powershell
+sentinel-bisect --repo fixtures/flaky-regression-demo --command "pytest -q tests/test_calculator.py" --serve
+```
+
+```text
+Culprit: 4d55af94be70f9781f97dac95343a0231d1a4d1c
+Report: sentinel-report.md
+Timeline: http://localhost:8787/runs/20260716-125306-4d55af9/timeline
+```
+
+The timeline is a self-contained page (no CDN dependencies) with a green/red/amber segment per commit, escalation tiers shown inline on any commit that was re-run at a larger rerun count, and a badge on any commit that stood in for a persistently-flaky one. It's served by a small FastAPI app (`report/server.py`), which also exposes:
+
+- `GET /runs` — lists discovered run ids
+- `GET /runs/{run_id}/trace` — the raw JSON trace
+- `GET /runs/{run_id}/timeline` — the HTML visualization
+- `GET /docs` — FastAPI's interactive API explorer
+
+Use `--serve-port` to change the port (default `8787`) and `--runs-dir` to change where per-run trace files are kept for the server to discover (default `sentinel-runs/`).
+
 ## Architecture
 
 - `intake/`: turns a bug report into a command and revision intent; GPT-5.6 is optional with an offline heuristic fallback.
 - `orchestrator/`: creates disposable Git worktrees, performs repeated command trials, and writes a JSON trace.
 - `analysis/`: supplies the confirmed diff and failure output to GPT-5.6 for a mechanism explanation and unified patch.
 - `verify/`: applies the suggested patch in the temporary worktree and repeats the target/smoke commands.
-- `report/`: creates a Markdown report with a demo-friendly search timeline.
+- `report/`: creates a Markdown report and an HTML timeline visualization with a demo-friendly search timeline, and (via `--serve`) a small FastAPI server that serves them over HTTP.
 
 ## Built with Codex
 

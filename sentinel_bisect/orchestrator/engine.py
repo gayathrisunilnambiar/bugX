@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Sequence
 
@@ -18,10 +19,19 @@ class UnresolvedFlakyCommit(RuntimeError):
     entire remaining search range is persistently flaky — a rare terminal state."""
 
 
+def _make_run_id(culprit: str | None) -> str:
+    """A sortable, human-readable id minted when a trace is written: a UTC
+    timestamp plus a short commit fingerprint so URLs stay unique per run."""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    fingerprint = (culprit or "unresolved")[:7]
+    return f"{stamp}-{fingerprint}"
+
+
 @dataclass(frozen=True)
 class BisectResult:
     culprit: str
     trace: list[TraceStep]
+    run_id: str | None = None
 
 
 class BisectEngine:
@@ -94,9 +104,10 @@ class BisectEngine:
                 low = decision_index
             else:
                 high = decision_index
-        result = BisectResult(culprit=commits[high], trace=trace)
-        self._write_trace(trace, trace_path, result.culprit)
-        return result
+        culprit = commits[high]
+        run_id = _make_run_id(culprit)
+        self._write_trace(trace, trace_path, culprit, run_id)
+        return BisectResult(culprit=culprit, trace=trace, run_id=run_id)
 
     def _decide(
         self,
@@ -146,8 +157,9 @@ class BisectEngine:
         )
 
     @staticmethod
-    def _write_trace(trace: list[TraceStep], path: Path | None, culprit: str | None = None) -> None:
+    def _write_trace(trace: list[TraceStep], path: Path | None, culprit: str | None = None, run_id: str | None = None) -> None:
         if path is None:
             return
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"culprit": culprit, "steps": [step.to_dict() for step in trace]}, indent=2), encoding="utf-8")
+        payload = {"run_id": run_id or _make_run_id(culprit), "culprit": culprit, "steps": [step.to_dict() for step in trace]}
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

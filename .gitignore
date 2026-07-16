@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 sentinel-report.md
 sentinel-trace.json
+sentinel-runs/
 fixtures/test-trace.json
 fixtures/.sentinel-worktrees/
 .venv/

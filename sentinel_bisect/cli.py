@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 
 import click
@@ -12,6 +13,7 @@ from sentinel_bisect.orchestrator.engine import BisectEngine, UnresolvedFlakyCom
 from sentinel_bisect.orchestrator.git import disposable_worktree, git
 from sentinel_bisect.orchestrator.models import DEFAULT_RERUN_SCHEDULE, parse_rerun_schedule
 from sentinel_bisect.report import render_markdown
+from sentinel_bisect.report.server import serve as serve_timeline
 from sentinel_bisect.verify import verify_patch
 
 
@@ -37,7 +39,31 @@ from sentinel_bisect.verify import verify_patch
 @click.option("--bug-report", type=click.Path(path_type=Path, exists=True), help="Bug report used to infer command/range.")
 @click.option("--analyze/--no-analyze", default=False, help="Request GPT-5.6 explanation and patch after bisection.")
 @click.option("--verify/--no-verify", default=False, help="Apply and verify an LLM-proposed patch in a temporary worktree.")
-def main(repo: Path, command: str | None, report_file: Path, trace_file: Path, runs: int | None, rerun_schedule: str | None, good: str | None, bad: str | None, bug_report: Path | None, analyze: bool, verify: bool) -> None:
+@click.option("--serve/--no-serve", default=False, help="After the run completes, serve an HTML timeline visualization over HTTP.")
+@click.option("--serve-port", default=8787, show_default=True, type=click.IntRange(1, 65535), help="Port for --serve.")
+@click.option(
+    "--runs-dir",
+    type=click.Path(path_type=Path),
+    default=Path("sentinel-runs"),
+    show_default=True,
+    help="Directory where per-run trace files are stored for --serve to discover.",
+)
+def main(
+    repo: Path,
+    command: str | None,
+    report_file: Path,
+    trace_file: Path,
+    runs: int | None,
+    rerun_schedule: str | None,
+    good: str | None,
+    bad: str | None,
+    bug_report: Path | None,
+    analyze: bool,
+    verify: bool,
+    serve: bool,
+    serve_port: int,
+    runs_dir: Path,
+) -> None:
     """Find the first consistently failing commit without touching your checkout."""
     load_dotenv()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -73,6 +99,15 @@ def main(repo: Path, command: str | None, report_file: Path, trace_file: Path, r
     report_file.write_text(render_markdown(result, analysis, verification), encoding="utf-8")
     click.echo(f"Culprit: {result.culprit}")
     click.echo(f"Report: {report_file}")
+    if serve:
+        run_id = result.run_id
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        # Copy the trace this run just wrote into the runs directory the server
+        # scans, keyed by run_id, so it's reachable at a stable /runs/{run_id} URL
+        # without disturbing the user's --trace-file output.
+        shutil.copy(trace_file, runs_dir / f"{run_id}.sentinel-trace.json")
+        click.echo(f"Timeline: http://localhost:{serve_port}/runs/{run_id}/timeline")
+        serve_timeline(runs_dir, port=serve_port)
 
 
 if __name__ == "__main__":

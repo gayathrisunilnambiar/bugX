@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Flaky-test-aware regression finder"
 license = "MIT"
 requires-python = ">=3.11"
-dependencies = ["click>=8.1", "openai>=1.0", "python-dotenv>=1.0"]
+dependencies = ["click>=8.1", "openai>=1.0", "python-dotenv>=1.0", "fastapi>=0.110", "uvicorn>=0.29"]
 
 [project.scripts]
 sentinel-bisect = "sentinel_bisect.cli:main"

@@ -1,4 +1,4 @@
-# Sentinel Bisect
+# bugX
 
 AI can generate a patch in seconds; the question is whether it is correct or merely lucky. Sentinel Bisect finds the regression-introducing commit in isolated worktrees, reruns evidence until it is trustworthy, and verifies a proposed fix before accepting it. It never lets one unverified pass/fail signal decide the search.
 

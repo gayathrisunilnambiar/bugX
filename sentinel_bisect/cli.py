@@ -37,6 +37,7 @@ def _augment_trace_with_analysis(trace_file: Path, escalation: EscalationOutcome
         return
     payload = json.loads(trace_file.read_text(encoding="utf-8"))
     payload["analysis"] = escalation.to_dict()
+    payload["analysis_provider"] = escalation.analysis_provider
     trace_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
@@ -92,6 +93,11 @@ def _augment_trace_with_analysis(trace_file: Path, escalation: EscalationOutcome
     default=None,
     help="Property-based or parameterized command --verify must also pass, proving a general invariant beyond target and smoke examples.",
 )
+@click.option(
+    "--mock-analysis",
+    is_flag=True,
+    help="Use the disclosed deterministic hard-fixture analysis double; requires --analyze and --verify and never calls OpenAI.",
+)
 @click.option("--serve/--no-serve", default=False, help="After the run completes, serve an HTML timeline visualization over HTTP.")
 @click.option("--serve-port", default=8787, show_default=True, type=click.IntRange(1, 65535), help="Port for --serve.")
 @click.option(
@@ -130,6 +136,7 @@ def main(
     max_analysis_tier: int | None,
     smoke_command: str | None,
     invariant_command: str | None,
+    mock_analysis: bool,
     serve: bool,
     serve_port: int,
     serve_host: str,
@@ -163,6 +170,8 @@ def main(
     analysis = None
     verification = None
     escalation = None
+    if mock_analysis and not (analyze and verify):
+        raise click.UsageError("--mock-analysis requires both --analyze and --verify")
     if analyze and verify:
         # Escalates reasoning effort tier-by-tier on verification failure; only
         # reports an unverified/failed state after every usable tier is exhausted
@@ -179,6 +188,7 @@ def main(
                 invariant_command=invariant_command,
                 tiers=tiers,
                 max_tier=max_analysis_tier,
+                mock_analysis=mock_analysis,
             )
         except MissingApiKeyError as exc:
             raise click.ClickException(str(exc)) from exc

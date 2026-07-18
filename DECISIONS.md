@@ -120,3 +120,24 @@
   the next reasoning-effort tier). Both are cases where direct tool calling (what
   this project already does) fits better than PTC's bounded, no-judgment-needed
   workflow shape.
+
+## Disclosed mock analysis harness (Session D)
+
+- **Interim evidence, not live-model evidence:** live GPT-5.6 analysis escalation on
+  the hard fixture remains unexercised because no paid API budget is available. We
+  considered waiting for hackathon credits and making a small personal spend. Both
+  could eventually answer the live-model question, but neither is available or
+  reliable enough to block verification of the application's own orchestration.
+  The stronger interim artifact is an explicit deterministic test double that can be
+  reviewed, rerun, and falsified locally.
+- **Why this is not a rigged demo:** `--mock-analysis` is opt-in and cannot replace
+  missing-key handling. It inspects the hard fixture's actual `parts[:-1]` defect;
+  tier1 makes wrapper hardcodes for the target and smoke examples, tier2 changes the
+  helper to `parts[:3]`, and tier3 changes it to all `parts`. The first two controls
+  fail the existing invariant specifically, while tier3 passes all three gates.
+  Therefore the progression comes from the known defect and verification contract,
+  not a lookup table chosen merely to make three badges appear.
+- **Disclosure rule:** mock runs write `analysis_provider: "mock"` at the trace run
+  level and every analysis attempt, and put a prominent disclosure in Markdown and
+  HTML. The harness proves end-to-end escalation plumbing and context threading; it
+  does not claim or imply that a live GPT-5.6 tier1 call will require escalation.

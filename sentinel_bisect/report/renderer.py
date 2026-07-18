@@ -12,6 +12,8 @@ def render_markdown(
     escalation: EscalationOutcome | None = None,
 ) -> str:
     lines = ["# Sentinel Bisect report", "", f"## Confirmed introducing commit", "", f"`{result.culprit}`", "", "## Search timeline", "", "```text"]
+    if escalation and escalation.analysis_provider == "mock":
+        lines[1:1] = ["", "> **DISCLOSED MOCK ANALYSIS PROVIDER** — This run used deterministic hand-built parser-defect controls, not GPT-5.6. See README and DECISIONS.md for scope and limitations.", ""]
     substituted = False
     for step in result.trace:
         icon = {"pass": "PASS", "fail": "FAIL", "flaky": "FLAKY"}[step.classification]

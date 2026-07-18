@@ -122,6 +122,10 @@ def render_timeline_html(trace_data: dict[str, Any]) -> str:
     flaky_count = sum(1 for step in steps if step.get("classification") == "flaky")
     substitution_count = sum(1 for step in steps if step.get("substitute_for"))
     trace_json = html.escape(json.dumps(trace_data, indent=2))
+    mock_banner = "" if trace_data.get("analysis_provider") != "mock" else (
+        '<div class="mock-banner"><strong>DISCLOSED MOCK ANALYSIS PROVIDER</strong> '
+        'This run used deterministic hand-built parser-defect controls, not GPT-5.6. See README and DECISIONS.md.</div>'
+    )
 
     return f"""<!doctype html>
 <html lang="en">
@@ -139,6 +143,7 @@ def render_timeline_html(trace_data: dict[str, Any]) -> str:
   .meta {{ color: #9aa0a6; margin-bottom: 1.5rem; font-size: 0.9rem; }}
   .meta code {{ color: #e6e6e6; background: #1c1f26; padding: 0.1rem 0.35rem; border-radius: 4px; }}
   .legend {{ display: flex; gap: 1.25rem; margin-bottom: 1.5rem; font-size: 0.85rem; }}
+  .mock-banner {{ border: 2px solid #ffb74d; background: #4a3517; color: #ffe0b2; padding: 0.8rem 1rem; border-radius: 8px; margin: 1rem 0 1.5rem; }}
   .legend-item {{ display: flex; align-items: center; gap: 0.4rem; }}
   .legend-swatch {{ width: 0.85rem; height: 0.85rem; border-radius: 3px; display: inline-block; }}
   .timeline {{
@@ -191,6 +196,7 @@ def render_timeline_html(trace_data: dict[str, Any]) -> str:
     <div class="legend-item"><span class="legend-swatch" style="background:{_COLORS['fail']}"></span> fail</div>
     <div class="legend-item"><span class="legend-swatch" style="background:{_COLORS['flaky']}"></span> flaky (escalated / routed around)</div>
   </div>
+  {mock_banner}
   <div class="timeline">
     {segments_html}
   </div>

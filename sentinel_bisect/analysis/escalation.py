@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from sentinel_bisect.analysis.mock import mock_analyze_culprit
 from sentinel_bisect.analysis.service import DEFAULT_ANALYSIS_MODEL, AnalysisResult, analyze_culprit
 from sentinel_bisect.orchestrator.git import disposable_worktree
 from sentinel_bisect.verify.service import VerificationResult, verify_patch
@@ -44,6 +45,7 @@ class EscalationAttempt:
     def to_dict(self) -> dict[str, object]:
         return {
             "tier": self.tier,
+            "analysis_provider": self.analysis.provider,
             "model": self.model,
             "effort": self.effort,
             "mode": self.mode,
@@ -62,6 +64,10 @@ class EscalationOutcome:
     attempts: list[EscalationAttempt]
 
     @property
+    def analysis_provider(self) -> str:
+        return self.final.analysis.provider
+
+    @property
     def final(self) -> EscalationAttempt:
         return self.attempts[-1]
 
@@ -78,6 +84,7 @@ class EscalationOutcome:
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "analysis_provider": self.analysis_provider,
             "attempts": [a.to_dict() for a in self.attempts],
             "verified_tier": self.final.tier if self.verified else None,
             "exhausted": self.exhausted,
@@ -94,6 +101,7 @@ def run_escalation(
     invariant_command: str | None = None,
     tiers: Sequence[Tier] = DEFAULT_TIERS,
     max_tier: int | None = None,
+    mock_analysis: bool = False,
 ) -> EscalationOutcome:
     """Run analysis -> verify, escalating the reasoning-effort tier whenever
     verification fails (didn't apply, or applied but a target/smoke/invariant command
@@ -111,7 +119,8 @@ def run_escalation(
     retry_context: str | None = None
 
     for tier in usable_tiers:
-        analysis = analyze_culprit(
+        provider = mock_analyze_culprit if mock_analysis else analyze_culprit
+        analysis = provider(
             repo,
             culprit,
             failing_output,

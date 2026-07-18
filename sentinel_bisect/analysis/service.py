@@ -43,6 +43,7 @@ class AnalysisResult:
     patch: str
     source: str
     response_id: str | None = None
+    provider: str = "openai"
 
 
 def analyze_culprit(

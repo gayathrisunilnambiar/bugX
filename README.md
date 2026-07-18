@@ -127,6 +127,16 @@ sentinel-bisect --repo fixtures/hard-regression-demo --command "pytest -q tests/
 
 The offline bisection portion of this fixture (culprit-finding, no `--analyze`/`--verify`) is verified as part of this repo's test/demo workflow. Whether GPT-5.6 tier 1 actually needs escalating against the *live* model is something only a run with a real `OPENAI_API_KEY` can show — see `DECISIONS.md` for what was and wasn't confirmed.
 
+### Disclosed mock analysis harness
+
+When API budget is unavailable, the hard fixture can exercise the complete escalation pipeline without pretending to call GPT-5.6:
+
+```powershell
+sentinel-bisect --repo fixtures/hard-regression-demo --command "pytest -q tests/test_calculator.py::test_parse_total" --smoke-command "pytest -q tests/test_calculator.py::test_parse_average" --invariant-command "pytest -q tests/test_invariants.py" --runs 1 --analyze --verify --mock-analysis
+```
+
+`--mock-analysis` is an explicit, disclosed deterministic test double, never a fallback for a missing API key. It supplies hand-built controls for the actual shared-parser defect: wrapper hardcodes, a three-value partial repair, then the general helper repair. It proves that Sentinel's CLI, disposable worktrees, three verification gates, response-context retry wiring, trace, report, and timeline drive tier1 to tier3 end-to-end. It does **not** prove live GPT-5.6 will make the same choices; live escalation on this fixture remains untested because API budget is unavailable. Mock artifacts visibly identify `analysis_provider: "mock"` and display a disclosure banner; see `DECISIONS.md` for the rationale.
+
 ### Visual timeline (`--serve`)
 
 The Markdown report and JSON trace are also available as a colored HTML timeline over HTTP — the same flaky-disambiguation moment shown in the "Proof" section above, but rendered visually instead of as a JSON excerpt. Pass `--serve` and, once the bisection finishes, Sentinel starts a local server and prints the URL to open:

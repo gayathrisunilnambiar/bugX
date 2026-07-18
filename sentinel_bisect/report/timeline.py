@@ -32,6 +32,11 @@ def _segment_html(step: dict[str, Any], index: int) -> str:
     substitute_for = step.get("substitute_for")
     escalation = step.get("escalation") or []
     outcomes = step.get("outcomes") or []
+    failures = step.get("failure_count", sum(outcome == "fail" for outcome in outcomes))
+    confidence_trial_count = step.get("trial_count", attempt_count)
+    confidence = step.get("confidence_failure_rate_exceeds_50pct")
+    if confidence is None:
+        confidence = 0.5
 
     escalation_html = ""
     if len(escalation) > 1:
@@ -56,18 +61,19 @@ def _segment_html(step: dict[str, Any], index: int) -> str:
         )
 
     outcomes_str = html.escape(", ".join(outcomes)) if outcomes else "n/a"
-    tooltip = f"{commit}\nclassification: {classification}\ndecision: {decision}\nattempts: {attempt_count}\noutcomes: {outcomes_str}"
+    tooltip = f"{commit}\nclassification: {classification}\ndecision: {decision}\nattempts: {attempt_count}\noutcomes: {outcomes_str}\nconfidence: {failures}/{confidence_trial_count} recorded trials failed; {float(confidence):.0%} probability failure rate exceeds 50%"
 
     return f"""
     <div class="segment-wrap">
       <div class="segment segment-{html.escape(classification)}" style="background:{color}" title="{html.escape(tooltip)}">
         <div class="segment-index">{index + 1}</div>
-        <div class="segment-label">{label}</div>
+        <div class="segment-label"><span class="status-dot"></span>{label}</div>
         <div class="segment-commit">{short_commit}</div>
         <div class="segment-runs">{attempt_count} runs</div>
       </div>
       {escalation_html}
       {substitution_html}
+      <div class="segment-confidence">{failures}/{confidence_trial_count} fail &middot; {float(confidence):.0%} &gt; 50%</div>
       <div class="segment-decision">{decision}</div>
     </div>
     """
@@ -100,11 +106,19 @@ def _analysis_escalation_html(analysis: dict[str, Any] | None) -> str:
         for attempt in attempts if attempt.get("verification_gates")
     )
     gates_html = f'<div class="gate-results"><strong>Verification gates</strong><ul>{gate_rows}</ul></div>' if gate_rows else ""
+    costs_html = ""
+    if analysis.get("estimated_total_cost_usd") is not None:
+        disclosure = html.escape(str(analysis.get("estimated_cost_disclosure", "ESTIMATED; not measured.")))
+        costs_html = (
+            '<div class="cost-estimate"><strong>Estimated analysis cost: $'
+            f'{float(analysis["estimated_total_cost_usd"]):.6f}</strong><br><span>{disclosure}</span></div>'
+        )
     return f"""
   <h2>Analysis escalation</h2>
   <div class="meta">{status} &middot; {len(attempts)} tier(s) attempted</div>
   <div class="escalation" style="margin-bottom: 1.5rem;">{tiers_html}</div>
   {gates_html}
+  {costs_html}
 """
 
 
@@ -121,10 +135,22 @@ def render_timeline_html(trace_data: dict[str, Any]) -> str:
     segments_html = "".join(_segment_html(step, i) for i, step in enumerate(steps))
     flaky_count = sum(1 for step in steps if step.get("classification") == "flaky")
     substitution_count = sum(1 for step in steps if step.get("substitute_for"))
+    efficiency = trace_data.get("bisection_efficiency") or {}
+    efficiency_html = ""
+    if efficiency:
+        efficiency_html = (
+            f'<div class="efficiency"><strong>Bisection efficiency</strong>: '
+            f'{efficiency.get("actual_distinct_commit_checks")} distinct commits executed '
+            f'({efficiency.get("anchor_commit_checks")} anchors; '
+            f'{efficiency.get("flaky_escalation_commit_count")} required flaky-escalation rerun tiers; '
+            f'{efficiency.get("routed_around_flaky_commit_count")} flaky decision point(s) routed around) '
+            f'vs. {efficiency.get("theoretical_git_bisect_commit_checks")} theoretical plain git bisect checks '
+            f'for a {efficiency.get("range_commit_count")}-commit range.</div>'
+        )
     trace_json = html.escape(json.dumps(trace_data, indent=2))
     mock_banner = "" if trace_data.get("analysis_provider") != "mock" else (
-        '<div class="mock-banner"><strong>DISCLOSED MOCK ANALYSIS PROVIDER</strong> '
-        'This run used deterministic hand-built parser-defect controls, not GPT-5.6. See README and DECISIONS.md.</div>'
+        '<aside class="mock-banner"><div class="mock-kicker">DISCLOSED TEST DOUBLE</div>'
+        '<strong>Mock analysis provider</strong><span>This run used deterministic hand-built parser-defect controls, not GPT-5.6. See README and DECISIONS.md.</span></aside>'
     )
 
     return f"""<!doctype html>
@@ -135,43 +161,53 @@ def render_timeline_html(trace_data: dict[str, Any]) -> str:
 <style>
   :root {{ color-scheme: light dark; }}
   body {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    margin: 0; padding: 2rem;
-    background: #0f1115; color: #e6e6e6;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0; padding: clamp(1.25rem, 4vw, 3rem);
+    background: radial-gradient(circle at top left, #1a2234, #0f1115 42rem); color: #eef1f6;
   }}
-  h1 {{ font-size: 1.25rem; margin-bottom: 0.25rem; }}
-  .meta {{ color: #9aa0a6; margin-bottom: 1.5rem; font-size: 0.9rem; }}
-  .meta code {{ color: #e6e6e6; background: #1c1f26; padding: 0.1rem 0.35rem; border-radius: 4px; }}
-  .legend {{ display: flex; gap: 1.25rem; margin-bottom: 1.5rem; font-size: 0.85rem; }}
-  .mock-banner {{ border: 2px solid #ffb74d; background: #4a3517; color: #ffe0b2; padding: 0.8rem 1rem; border-radius: 8px; margin: 1rem 0 1.5rem; }}
+  h1 {{ font-size: clamp(1.5rem, 3vw, 2.1rem); letter-spacing: -0.035em; margin: 0 0 0.35rem; }}
+  h2 {{ margin: 2rem 0 0.35rem; font-size: 1.1rem; letter-spacing: -0.015em; }}
+  .meta {{ color: #b2bac8; margin-bottom: 1.25rem; font-size: 0.9rem; line-height: 1.5; }}
+  .meta code {{ color: #eef1f6; background: #222937; padding: 0.12rem 0.4rem; border-radius: 5px; }}
+  .legend {{ display: flex; flex-wrap: wrap; gap: 0.55rem 1rem; margin: 0 0 1.25rem; font-size: 0.82rem; color: #cbd3df; }}
+  .mock-banner {{ border: 1px solid #e59c35; border-left-width: 5px; background: linear-gradient(105deg, #4a3517, #2b251c); color: #ffe6bd; padding: 1rem 1.1rem; border-radius: 9px; margin: 1rem 0 1.5rem; box-shadow: 0 8px 28px rgba(0,0,0,0.22); display: grid; gap: 0.25rem; max-width: 62rem; }}
+  .mock-banner strong {{ font-size: 1rem; }}
+  .mock-banner span {{ color: #f5dcb2; font-size: 0.88rem; line-height: 1.45; }}
+  .mock-kicker {{ color: #ffbd5a; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.11em; }}
   .legend-item {{ display: flex; align-items: center; gap: 0.4rem; }}
-  .legend-swatch {{ width: 0.85rem; height: 0.85rem; border-radius: 3px; display: inline-block; }}
+  .legend-swatch {{ width: 0.75rem; height: 0.75rem; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 3px rgba(255,255,255,0.06); }}
   .timeline {{
-    display: flex; flex-wrap: wrap; gap: 1.1rem; align-items: flex-start;
-    padding: 1rem; background: #161923; border-radius: 10px;
+    display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-start;
+    padding: 1.3rem; background: rgba(22,25,35,0.92); border: 1px solid #2d3544; border-radius: 14px;
+    box-shadow: 0 12px 35px rgba(0,0,0,0.18);
   }}
-  .segment-wrap {{ display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }}
+  .segment-wrap {{ display: flex; flex-direction: column; align-items: center; gap: 0.45rem; }}
   .segment {{
-    width: 6.5rem; min-height: 5.5rem; border-radius: 8px; padding: 0.5rem;
+    width: 7rem; min-height: 5.9rem; border-radius: 10px; padding: 0.65rem;
     color: #10130d; display: flex; flex-direction: column; justify-content: space-between;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4); cursor: default;
+    box-shadow: 0 5px 14px rgba(0,0,0,0.28); cursor: default; border: 1px solid rgba(255,255,255,0.35);
   }}
-  .segment-flaky {{ color: #241b00; }}
-  .segment-index {{ font-size: 0.7rem; opacity: 0.7; }}
-  .segment-label {{ font-weight: 700; font-size: 0.9rem; }}
-  .segment-commit {{ font-family: ui-monospace, Menlo, monospace; font-size: 0.7rem; }}
-  .segment-runs {{ font-size: 0.7rem; }}
-  .segment-decision {{ font-size: 0.65rem; color: #9aa0a6; max-width: 7rem; text-align: center; }}
-  .escalation {{ display: flex; gap: 0.2rem; }}
+  .segment-flaky {{ color: #241b00; outline: 3px solid rgba(224,163,0,0.34); outline-offset: 3px; }}
+  .segment-index {{ font-size: 0.68rem; opacity: 0.7; }}
+  .segment-label {{ font-weight: 800; font-size: 0.92rem; letter-spacing: 0.035em; display: flex; align-items: center; gap: 0.35rem; }}
+  .status-dot {{ width: 0.45rem; height: 0.45rem; background: currentColor; border-radius: 50%; display: inline-block; }}
+  .segment-commit {{ font-family: ui-monospace, Menlo, monospace; font-size: 0.72rem; font-weight: 600; }}
+  .segment-runs {{ font-size: 0.72rem; font-weight: 600; }}
+  .segment-decision {{ font-size: 0.68rem; color: #b7c0cf; max-width: 8rem; text-align: center; line-height: 1.35; }}
+  .segment-confidence {{ font-size: 0.66rem; color: #d0d7e4; max-width: 8rem; text-align: center; }}
+  .efficiency, .cost-estimate {{ margin: 1.1rem 0; padding: 0.85rem 1rem; border-radius: 9px; background: #1a2230; border: 1px solid #34445b; color: #dbe5f4; font-size: 0.85rem; line-height: 1.45; max-width: 62rem; }}
+  .cost-estimate {{ border-left: 4px solid #e59c35; }}
+  .cost-estimate span {{ color: #f5dcb2; font-size: 0.8rem; }}
+  .escalation {{ display: flex; gap: 0.3rem; }}
   .tier {{
-    width: 1.4rem; height: 1.1rem; border-radius: 3px; font-size: 0.6rem;
-    display: flex; align-items: center; justify-content: center; color: #10130d;
+    min-width: 1.55rem; height: 1.25rem; border-radius: 4px; font-size: 0.64rem; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; color: #10130d; border: 1px solid rgba(255,255,255,0.3);
   }}
   .tier-pass {{ background: {_COLORS['pass']}; }}
   .tier-fail {{ background: {_COLORS['fail']}; }}
   .tier-flaky {{ background: {_COLORS['flaky']}; }}
   .substitution-badge {{
-    font-size: 0.65rem; background: #2a2f3d; color: #8fd3ff; padding: 0.15rem 0.4rem;
+    font-size: 0.68rem; background: #253447; color: #a7ddff; padding: 0.22rem 0.5rem;
     border-radius: 999px; white-space: nowrap;
   }}
   .gate-results {{ margin: -0.5rem 0 1.5rem; color: #c7cbd1; font-size: 0.85rem; }}
@@ -179,7 +215,7 @@ def render_timeline_html(trace_data: dict[str, Any]) -> str:
   details {{ margin-top: 2rem; }}
   summary {{ cursor: pointer; color: #9aa0a6; }}
   pre {{
-    background: #161923; padding: 1rem; border-radius: 8px; overflow-x: auto;
+    background: #161923; border: 1px solid #2d3544; padding: 1rem; border-radius: 10px; overflow-x: auto;
     font-size: 0.75rem; line-height: 1.4;
   }}
 </style>
@@ -197,6 +233,7 @@ def render_timeline_html(trace_data: dict[str, Any]) -> str:
     <div class="legend-item"><span class="legend-swatch" style="background:{_COLORS['flaky']}"></span> flaky (escalated / routed around)</div>
   </div>
   {mock_banner}
+  {efficiency_html}
   <div class="timeline">
     {segments_html}
   </div>

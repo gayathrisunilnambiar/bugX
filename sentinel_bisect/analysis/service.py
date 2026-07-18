@@ -8,6 +8,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
+from sentinel_bisect.analysis.costs import CostEstimate
 from sentinel_bisect.orchestrator.git import git
 
 LOG = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class AnalysisResult:
     source: str
     response_id: str | None = None
     provider: str = "openai"
+    cost_estimate: CostEstimate | None = None
 
 
 def analyze_culprit(

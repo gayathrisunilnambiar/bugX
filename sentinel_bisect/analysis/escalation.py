@@ -43,7 +43,7 @@ class EscalationAttempt:
         return self.verification is not None and self.verification.verified
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "tier": self.tier,
             "analysis_provider": self.analysis.provider,
             "model": self.model,
@@ -57,6 +57,9 @@ class EscalationAttempt:
             "verification_gates": self.verification.gates_dict() if self.verification else [],
             "informed_by": self.informed_by,
         }
+        if self.analysis.cost_estimate:
+            result.update(self.analysis.cost_estimate.to_dict())
+        return result
 
 
 @dataclass(frozen=True)
@@ -83,12 +86,23 @@ class EscalationOutcome:
         return not self.verified
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "analysis_provider": self.analysis_provider,
             "attempts": [a.to_dict() for a in self.attempts],
             "verified_tier": self.final.tier if self.verified else None,
             "exhausted": self.exhausted,
         }
+        estimates = [a.analysis.cost_estimate for a in self.attempts if a.analysis.cost_estimate]
+        if estimates:
+            # Every populated estimate comes from the same disclosed mock pricing
+            # model, so summing preserves its estimate-only status.
+            from sentinel_bisect.analysis.costs import COST_ESTIMATE_DISCLOSURE, GPT_56_SOL_PRICING_SOURCE
+            result.update({
+                "estimated_total_cost_usd": sum(estimate.estimated_cost_usd for estimate in estimates),
+                "estimated_cost_disclosure": COST_ESTIMATE_DISCLOSURE,
+                "pricing_source": GPT_56_SOL_PRICING_SOURCE,
+            })
+        return result
 
 
 def run_escalation(

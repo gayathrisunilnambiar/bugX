@@ -78,8 +78,18 @@ def test_mock_analysis_cli_runs_three_real_verification_attempts(tmp_path: Path,
     assert [attempt["verified"] for attempt in attempts] == [False, False, True]
     assert [attempt["verification_gates"][-1]["name"] for attempt in attempts] == ["invariant", "invariant", "invariant"]
     assert [attempt["verification_gates"][-1]["passed"] for attempt in attempts] == [False, False, True]
-    assert "DISCLOSED MOCK ANALYSIS PROVIDER" in report_file.read_text(encoding="utf-8")
-    assert "DISCLOSED MOCK ANALYSIS PROVIDER" in render_timeline_html(trace)
+    assert trace["analysis"]["estimated_total_cost_usd"] > 0
+    assert "ESTIMATED" in trace["analysis"]["estimated_cost_disclosure"]
+    assert "no live GPT-5.6 API call has been made" in trace["analysis"]["estimated_cost_disclosure"]
+    report = report_file.read_text(encoding="utf-8")
+    assert "DISCLOSED MOCK ANALYSIS PROVIDER" in report
+    assert "Estimated total analysis cost:" in report
+    assert "ESTIMATED from published GPT-5.6 Sol pricing" in report
+    timeline = render_timeline_html(trace)
+    assert "DISCLOSED TEST DOUBLE" in timeline
+    assert "Mock analysis provider" in timeline
+    assert "Estimated analysis cost:" in timeline
+    assert "no live GPT-5.6 API call has been made" in timeline
 
 
 def test_cli_without_mock_analysis_keeps_missing_key_error(monkeypatch, tmp_path: Path) -> None:

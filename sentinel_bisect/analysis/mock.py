@@ -8,11 +8,16 @@ from __future__ import annotations
 import difflib
 from pathlib import Path
 
+from sentinel_bisect.analysis.costs import estimate_gpt_56_sol_cost
 from sentinel_bisect.analysis.service import AnalysisResult
 from sentinel_bisect.orchestrator.git import git
 
 
 _BUGGY_HELPER = "return [int(part) for part in parts[:-1]]"
+_MOCK_REQUEST_PREFIX = (
+    "You are diagnosing a confirmed regression. Return JSON only: explanation "
+    "(plain English) and patch (a minimal unified diff, or empty if unsafe)."
+)
 
 
 def mock_analyze_culprit(
@@ -46,6 +51,7 @@ def mock_analyze_culprit(
             model or "mock",
             f"mock-hard-parser-tier{tier}",
             "mock",
+            estimate_gpt_56_sol_cost(_MOCK_REQUEST_PREFIX + source + failing_output, ""),
         )
 
     if tier == 1:
@@ -64,12 +70,20 @@ def mock_analyze_culprit(
         replacement = source.replace(_BUGGY_HELPER, "return [int(part) for part in parts]")
         explanation = "Mock control tier 3 fixes the shared helper by parsing every validated segment."
 
+    # Keep this tied to the real inputs and generated control output. It is a
+    # structural estimate only (not a tokenizer or billing measurement), which the
+    # reporting layer repeats verbatim wherever it displays a dollar amount.
+    request_text = _MOCK_REQUEST_PREFIX + (retry_context or "")
+    if not previous_response_id:
+        request_text += source + failing_output
+    patch = _unified_patch(source, replacement)
     return AnalysisResult(
         explanation,
-        _unified_patch(source, replacement),
+        patch,
         model or "mock",
         f"mock-hard-parser-tier{tier}",
         "mock",
+        estimate_gpt_56_sol_cost(request_text, explanation + patch),
     )
 
 

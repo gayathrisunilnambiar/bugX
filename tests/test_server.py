@@ -70,6 +70,8 @@ def test_timeline_endpoint_renders_html_with_flaky_and_substitution_markers(tmp_
     assert "FLAKY" in body
     assert "substitute for" in body
     assert "escalation" in body
+    assert "status-dot" in body
+    assert "segment-flaky" in body
 
 
 def test_unknown_run_id_returns_404(tmp_path: Path) -> None:

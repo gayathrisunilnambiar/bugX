@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from .metrics import outcome_confidence
+
 DEFAULT_RERUN_SCHEDULE: tuple[int, ...] = (3, 7, 15)
 
 
@@ -78,11 +80,20 @@ class TraceStep:
     def to_dict(self) -> dict[str, object]:
         # Keep the classification evidence together at the top of JSON traces;
         # captured command output follows for readers who need raw diagnostics.
+        # Escalation tiers are independent batches. When present, use every
+        # recorded batch rather than silently discarding earlier mixed evidence.
+        confidence_outcomes = (
+            [outcome for tier in self.escalation for outcome in tier.outcomes]
+            if len(self.escalation) > 1
+            else self.outcomes
+        )
+        confidence = outcome_confidence(confidence_outcomes)
         return {
             "commit": self.commit,
             "classification": self.classification,
             "attempt_count": self.attempt_count,
             "outcomes": self.outcomes,
+            **confidence,
             "decision": self.decision,
             "retry": self.retry,
             # Per-tier escalation history so readers can see a flaky commit being

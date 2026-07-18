@@ -12,6 +12,8 @@ def test_report_includes_visual_search_timeline() -> None:
     assert "Search timeline" in report
     assert "FLAKY abc123" in report
     assert "excluded from trusted pass/fail boundary decisions" in report
+    assert "2/3 recorded trials failed" in report
+    assert "confidence failure rate exceeds 50%" in report
 
 
 def test_report_surfaces_escalation_and_substitution() -> None:

@@ -9,6 +9,7 @@ from typing import Iterator, Sequence
 
 from .git import commit_range, disposable_worktree
 from .models import Classification, DEFAULT_RERUN_SCHEDULE, TraceStep, TrialResult
+from .metrics import bisection_efficiency
 from .runner import run_command_with_schedule
 
 LOG = logging.getLogger(__name__)
@@ -55,6 +56,11 @@ class BisectResult:
     culprit: str
     trace: list[TraceStep]
     run_id: str | None = None
+    range_commit_count: int = 1
+
+    @property
+    def efficiency(self) -> dict[str, int]:
+        return bisection_efficiency(self.range_commit_count, [step.to_dict() for step in self.trace])
 
 
 class BisectEngine:
@@ -152,8 +158,9 @@ class BisectEngine:
                 high = decision_index
         culprit = commits[high]
         run_id = _make_run_id(culprit)
-        self._write_trace(trace, trace_path, culprit, run_id)
-        return BisectResult(culprit=culprit, trace=trace, run_id=run_id)
+        self._write_trace(trace, trace_path, culprit, run_id, len(commits))
+        LOG.info("========== CULPRIT CONFIRMED: %s ==========", culprit)
+        return BisectResult(culprit=culprit, trace=trace, run_id=run_id, range_commit_count=len(commits))
 
     def _verify_anchor(self, revision: str, role: str, trace: list[TraceStep], trace_path: Path | None) -> None:
         """Test a good ('baseline') or bad ('anchor') boundary commit and abort with a
@@ -211,7 +218,14 @@ class BisectEngine:
         """
         revision = commits[index]
         trial = self._trial(revision)
-        LOG.info("tested %s: %s (%d attempts)", revision[:12], trial.classification, len(trial.attempts))
+        if trial.classification == Classification.FLAKY:
+            tiers = " -> ".join(str(tier.runs) for tier in trial.escalation)
+            LOG.info(
+                "[FLAKY] %s  mixed results after %d attempts (rerun tiers: %s)",
+                revision[:12], len(trial.attempts), tiers,
+            )
+        else:
+            LOG.info("[%s] %s  consistent after %d attempts", trial.classification.upper(), revision[:12], len(trial.attempts))
         if trial.classification != Classification.FLAKY:
             trace.append(self._step(revision, trial, f"trusted_{trial.classification}"))
             return index, trial.classification
@@ -219,17 +233,17 @@ class BisectEngine:
         # Midpoint stayed flaky even after the full escalation schedule. Do not stop:
         # route around it using an adjacent commit as a substitute decision point.
         trace.append(self._step(revision, trial, "untrusted_flaky"))
-        LOG.info("midpoint %s unresolved after escalation; routing around", revision[:12])
+        LOG.info("[FLAKY] %s  unresolved after the configured rerun schedule; routing around", revision[:12])
         for candidate in self._substitution_order(index, low, high):
             substitute = commits[candidate]
             sub_trial = self._trial(substitute)
             if sub_trial.classification == Classification.FLAKY:
                 trace.append(self._step(substitute, sub_trial, "untrusted_flaky", substitute_for=revision))
-                LOG.info("substitute probe %s also flaky; trying next", substitute[:12])
+                LOG.info("[FLAKY] substitute %s  also mixed; trying the next candidate", substitute[:12])
                 continue
             decision = f"substituted_{sub_trial.classification}"
             trace.append(self._step(substitute, sub_trial, decision, substitute_for=revision))
-            LOG.info("routed around %s using substitute %s: %s", revision[:12], substitute[:12], sub_trial.classification)
+            LOG.info("[ROUTED] %s  substitute %s is %s", revision[:12], substitute[:12], sub_trial.classification.upper())
             return candidate, sub_trial.classification
 
         # Every interior commit in the remaining range is persistently flaky: this is
@@ -240,9 +254,12 @@ class BisectEngine:
         )
 
     @staticmethod
-    def _write_trace(trace: list[TraceStep], path: Path | None, culprit: str | None = None, run_id: str | None = None) -> None:
+    def _write_trace(trace: list[TraceStep], path: Path | None, culprit: str | None = None, run_id: str | None = None, range_commit_count: int | None = None) -> None:
         if path is None:
             return
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"run_id": run_id or _make_run_id(culprit), "culprit": culprit, "steps": [step.to_dict() for step in trace]}
+        steps = [step.to_dict() for step in trace]
+        payload: dict[str, object] = {"run_id": run_id or _make_run_id(culprit), "culprit": culprit, "steps": steps}
+        if range_commit_count is not None:
+            payload["bisection_efficiency"] = bisection_efficiency(range_commit_count, steps)
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

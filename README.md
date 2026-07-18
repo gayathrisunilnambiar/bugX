@@ -12,25 +12,46 @@ Sentinel's key distinction is that it establishes a repeatable signal while sear
 
 ### Proof: flaky disambiguation in action
 
-The checked-in [demo trace](fixtures/demo-trace.json) is produced by regenerating the included fixture and running the documented command with three attempts per candidate. The fixture places the unrelated intermittent probe at the deterministic first midpoint. This excerpt is from that run; its `untrusted_flaky` decision means the commit could not be trusted to select a bisection branch. Rather than stopping, Sentinel routes around it: the very next trace step (see `substitute_for` below) is a stable adjacent commit that stands in as the decision point so the search keeps going. The `escalation` array records each rerun tier and its outcomes; here the single documented tier of 3 was still mixed, so the commit was routed around.
+The checked-in [demo trace](fixtures/demo-trace.json) is produced by regenerating the included fixture and running the documented command with the default adaptive rerun schedule (`3,7,15`). The fixture places the unrelated intermittent probe at the deterministic first midpoint. This excerpt is from that run; its `untrusted_flaky` decision means the commit could not be trusted to select a bisection branch even after escalating through every tier. Rather than stopping, Sentinel routes around it: the very next trace step (see `substitute_for` below) is a stable adjacent commit that stands in as the decision point so the search keeps going. The `escalation` array records each rerun tier and its outcomes; here all three tiers — 3, 7, and 15 attempts — stayed mixed, so the commit was routed around only after the full schedule was exhausted.
 
 ```json
 {
   "commit": "1b1e9dca495f3f2da53b30babf4b890eb59b3a70",
   "classification": "flaky",
-  "attempt_count": 3,
-  "outcomes": ["fail", "pass", "fail"],
+  "attempt_count": 15,
+  "outcomes": ["fail", "pass", "fail", "pass", "fail", "pass", "fail", "pass", "fail", "pass", "fail", "pass", "fail", "pass", "fail"],
   "escalation": [
-    { "runs": 3, "classification": "flaky", "outcomes": ["fail", "pass", "fail"] }
+    { "runs": 3, "classification": "flaky", "outcomes": ["fail", "pass", "fail"] },
+    { "runs": 7, "classification": "flaky", "outcomes": ["pass", "fail", "pass", "fail", "pass", "fail", "pass"] },
+    { "runs": 15, "classification": "flaky", "outcomes": ["fail", "pass", "fail", "pass", "fail", "pass", "fail", "pass", "fail", "pass", "fail", "pass", "fail", "pass", "fail"] }
   ],
   "decision": "untrusted_flaky",
   "substitute_for": null
 }
 ```
 
-The following step in the trace carries `"decision": "substituted_pass"` and `"substitute_for": "1b1e9dca…"`, marking the adjacent commit that was used in place of the flaky one.
+The following step in the trace carries `"decision": "substituted_pass"` and `"substitute_for": "1b1e9dca…"`, marking the adjacent commit that was used in place of the flaky one. This same escalation and substitution are visible in `demo-report.md`'s ASCII timeline (`escalated: 3->flaky, 7->flaky, 15->flaky`) and, if you pass `--serve`, in the rendered HTML timeline as three inline tier segments on the flaky commit followed by a substitution badge.
+
+## Quick Test (No Setup)
+
+Two options that need nothing installed beyond Docker or a browser — no venv, no `pip install`, no `.env`, no `OPENAI_API_KEY`. Both run the same offline bisection demo shown in the "Proof" section above: regenerate the fixture, bisect it with the adaptive rerun schedule, and serve the HTML timeline.
+
+**Option A — Docker (instant output):**
+
+```bash
+docker build -t sentinel-bisect .
+docker run --rm -p 8787:8787 sentinel-bisect
+```
+
+The container prints the same `Culprit: ...` / `Report: ...` / `Timeline: ...` lines a manual run produces. Because `-p 8787:8787` maps the container's port to the host, open the printed `http://localhost:8787/runs/.../timeline` URL directly in a browser on your machine. Leave the container running (it stays up to keep serving the timeline); `Ctrl+C` or `docker stop` to exit.
+
+**Option B — GitHub Codespaces / VS Code Dev Containers (interactive session):**
+
+Open this repository in a Codespace (**Code → Codespaces → Create codespace on main** on GitHub), or locally via the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) (**Reopen in Container**). [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) provisions Python 3.11, creates the venv, installs dependencies, and regenerates the fixture automatically — the terminal is ready for `sentinel-bisect` commands with no manual setup. Port `8787` is auto-forwarded, so `--serve` works the same way it does locally.
 
 ## Setup
+
+The above requires no local install. Continue below only if you want to develop against the project directly (edit code, run the test suite, configure `OPENAI_API_KEY` for `--analyze`/`--verify`).
 
 Python 3.11+ and Git are required.
 
@@ -69,10 +90,10 @@ python fixtures/build_fixture.py
 Then search it with a focused, stable reproduction command. The fixture deliberately includes an unrelated random flaky test, so the demo illustrates why the report names a target instead of blindly running every test.
 
 ```powershell
-sentinel-bisect --repo fixtures/flaky-regression-demo --command "pytest -q tests/test_calculator.py" --runs 3 --report-file demo-report.md --trace-file demo-trace.json
+sentinel-bisect --repo fixtures/flaky-regression-demo --command "pytest -q tests/test_calculator.py" --report-file demo-report.md --trace-file demo-trace.json
 ```
 
-Expected terminal output identifies the commit whose subject is `optimize parser result handling`. Open `demo-report.md` for the compact ASCII timeline and `demo-trace.json` for every attempt's captured output. The fixture generator is reproducible, so each demo begins with the same history.
+Expected terminal output identifies the commit whose subject is `optimize parser result handling`. This uses the default adaptive rerun schedule (`3,7,15`), so the flaky commit hits in the fixture escalates through all three tiers before Sentinel routes around it — see the "Proof" section above for exactly what that looks like in the trace. Open `demo-report.md` for the compact ASCII timeline and `demo-trace.json` for every attempt's captured output. The fixture generator is reproducible, so each demo begins with the same history. (Pass `--runs N` instead to pin a fixed, non-escalating rerun count for a faster or simpler run; it's a shorthand, not the recommended default.)
 
 For natural-language intake, put a report such as this into `bug.txt`:
 
@@ -93,6 +114,18 @@ sentinel-bisect --repo fixtures/flaky-regression-demo --command "pytest -q tests
 ```
 
 The proposed patch is applied only inside a disposable worktree at the culprit revision. Sentinel runs the focused target repeatedly and reports verification only when every run passes.
+
+### Reasoning-effort escalation demo
+
+The hard-regression demo uses three required verification gates: target, smoke, and a parameterized shared-parser invariant. The invariant checks that parsing preserves every valid comma-separated integer segment across a range of sequence lengths and values, so wrapper hardcodes and a helper that retains only the first few values fail even when both known examples pass. Its criteria come from the helper's domain contract, not model-output tuning.
+
+`fixtures/hard-regression-demo/` (regenerate with `python fixtures/build_hard_fixture.py`) is built so a patch that only fixes the symptom shown in the declared target's failing output can still fail a second, `--smoke-command`-checked function — the trigger for escalating `analysis/` to the next reasoning-effort tier (see "GPT-5.6 model configuration" above):
+
+```powershell
+sentinel-bisect --repo fixtures/hard-regression-demo --command "pytest -q tests/test_calculator.py::test_parse_total" --smoke-command "pytest -q tests/test_calculator.py::test_parse_average" --invariant-command "pytest -q tests/test_invariants.py" --analyze --verify
+```
+
+The offline bisection portion of this fixture (culprit-finding, no `--analyze`/`--verify`) is verified as part of this repo's test/demo workflow. Whether GPT-5.6 tier 1 actually needs escalating against the *live* model is something only a run with a real `OPENAI_API_KEY` can show — see `DECISIONS.md` for what was and wasn't confirmed.
 
 ### Visual timeline (`--serve`)
 
@@ -137,15 +170,22 @@ Use `--serve-port` to change the port (default `8787`) and `--runs-dir` to chang
 
 - `intake/`: turns a bug report into a command and revision intent; GPT-5.6 is optional with an offline heuristic fallback.
 - `orchestrator/`: creates disposable Git worktrees, performs repeated command trials, and writes a JSON trace.
-- `analysis/`: supplies the confirmed diff and failure output to GPT-5.6 for a mechanism explanation and unified patch.
-- `verify/`: applies the suggested patch in the temporary worktree and repeats the target/smoke commands.
+- `analysis/`: supplies the confirmed diff and failure output to GPT-5.6 for a mechanism explanation and unified patch, escalating reasoning effort on verification failure (see below).
+- `verify/`: applies the suggested patch in the temporary worktree and runs every configured target, smoke, and invariant gate, recording each result.
 - `report/`: creates a Markdown report and an HTML timeline visualization with a demo-friendly search timeline, and (via `--serve`) a small FastAPI server that serves them over HTTP.
+
+### GPT-5.6 model configuration
+
+- **Model tiers:** `intake/` calls `gpt-5.6-luna` at `reasoning.effort: low` — a bounded structured-extraction task. `analysis/` calls `gpt-5.6-sol` starting at `effort: high`. Both are configurable via `--intake-model`/`--analysis-model` (or the `SENTINEL_INTAKE_MODEL`/`SENTINEL_ANALYSIS_MODEL` env vars).
+- **Reasoning-effort escalation:** when both `--analyze` and `--verify` are given, a failed verification (patch didn't apply, or the target/smoke command still fails) escalates `analysis/` to the next tier — `effort: high` -> `effort: xhigh` -> `reasoning.mode: pro` — and retries, informed by the prior attempt's response id and failure reason (`previous_response_id` + `reasoning.context: all_turns`). Only after every tier is exhausted is an unverified/failed result reported; the tier ladder is capped with `--max-analysis-tier`, and every attempt is visible in the JSON trace and the Markdown/HTML report, the same way rerun-count escalation already is. This mirrors the orchestrator's own escalation philosophy (3 -> 7 -> 15 reruns) applied to model quality instead of test reruns.
+- **Explicit prompt caching:** both calls set `prompt_cache_options: {mode: "explicit", ttl: "1h"}` on their stable `instructions` field (never on the per-run diff/bug-report text). A ~1h TTL fits repeated demo/judging runs in one sitting. Pass `--debug` to log `cached_tokens`/`cache_write_tokens` from each response.
+- **Programmatic Tool Calling (PTC):** evaluated, not used. `--analyze` is a single high-stakes call whose output is applied by `verify/` only after passing verification, and each result can change what happens next (whether to escalate to the next tier) — both cases where GPT-5.6's own guidance favors direct tool calling over PTC's bounded, no-judgment-needed workflow shape.
 
 ## Built with Codex and Claude Code
 
 **Codex** accelerated the project scaffold, test fixture generator, typed module boundaries, CLI wiring, and unit tests. The core confidence policy and small demo history were deliberately hand-tuned for easy explanation in a three-minute walkthrough.
 
-**Claude Code** hardened and extended the implementation with cross-platform setup documentation, OPENAI_API_KEY error handling with clear messages, the escalation tiers and adaptive rerun schedule, flaky-commit routing via substitution, the self-contained HTML timeline visualization served over HTTP, minimal GitHub Actions CI integration, and comprehensive edge-case handling (no regression, flaky baseline, command failures, empty ranges).
+**Claude Code** hardened and extended the implementation with cross-platform setup documentation, OPENAI_API_KEY error handling with clear messages, the escalation tiers and adaptive rerun schedule, flaky-commit routing via substitution, the self-contained HTML timeline visualization served over HTTP, minimal GitHub Actions CI integration, comprehensive edge-case handling (no regression, flaky baseline, command failures, empty ranges), and the GPT-5.6 feature batch described above: model-tier routing (`gpt-5.6-luna`/`gpt-5.6-sol`), reasoning-effort quality escalation on verification failure, persisted reasoning across escalation retries via `previous_response_id`, and explicit prompt caching.
 
 GPT-5.6 is reserved for two judgment-heavy tasks: extracting structured reproduction intent from raw reports, and interpreting a *confirmed* diff plus failure output into an explanation and minimal patch. It does not make bisection decisions.
 

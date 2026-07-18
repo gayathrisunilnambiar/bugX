@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.post_pr_comment import build_comment
+from scripts.post_pr_comment import _truncate_explanation, build_comment
 
 TRACE_WITH_SUBSTITUTION = {
     "run_id": "20250101-000000-abc1234",
@@ -37,3 +37,38 @@ def test_comment_includes_artifact_and_run_url_when_given() -> None:
     )
     assert "sentinel-bisect-report" in body
     assert "https://github.com/example/repo/actions/runs/1" in body
+
+
+def test_comment_includes_truncated_analysis_explanation_when_present() -> None:
+    trace = {
+        **TRACE_WITH_SUBSTITUTION,
+        "analysis": {
+            "attempts": [{"tier": "tier1", "explanation": "The parser drops the last value.", "verified": True}],
+            "verified_tier": "tier1",
+            "exhausted": False,
+        },
+    }
+    body = build_comment(trace, Path("."), run_url=None, artifact_name=None)
+    assert "**Analysis (verified fix):** The parser drops the last value." in body
+
+
+def test_comment_omits_analysis_section_when_trace_has_none() -> None:
+    body = build_comment(TRACE_WITH_SUBSTITUTION, Path("."), run_url=None, artifact_name=None)
+    assert "**Analysis" not in body
+
+
+def test_truncate_explanation_keeps_short_text_unchanged() -> None:
+    assert _truncate_explanation("Short explanation.") == "Short explanation."
+
+
+def test_truncate_explanation_cuts_at_first_sentence_when_within_budget() -> None:
+    long_tail = "x" * 300
+    text = f"First sentence is short. {long_tail}"
+    assert _truncate_explanation(text) == "First sentence is short."
+
+
+def test_truncate_explanation_hard_caps_when_no_early_sentence_boundary() -> None:
+    text = "a" * 400
+    result = _truncate_explanation(text, max_chars=50)
+    assert len(result) == 50
+    assert result.endswith("…")

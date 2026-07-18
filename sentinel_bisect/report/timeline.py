@@ -73,6 +73,41 @@ def _segment_html(step: dict[str, Any], index: int) -> str:
     """
 
 
+def _analysis_escalation_html(analysis: dict[str, Any] | None) -> str:
+    """Render the --analyze/--verify reasoning-effort escalation ladder the same
+    visual way rerun-count escalation tiers are shown on a commit segment: a small
+    badge per tier, colored by whether that tier's patch verified.
+    """
+    if not analysis:
+        return ""
+    attempts = analysis.get("attempts") or []
+    if not attempts:
+        return ""
+    tiers_html = "".join(
+        f'<div class="tier tier-{"pass" if attempt.get("verified") else "fail"}" '
+        f'title="{html.escape(str(attempt.get("verification_message") or attempt.get("explanation") or ""))}">'
+        f'{html.escape(str(attempt.get("tier")))}'
+        "</div>"
+        for attempt in attempts
+    )
+    verified_tier = analysis.get("verified_tier")
+    status = f"verified at {html.escape(str(verified_tier))}" if verified_tier else "exhausted without a verified patch"
+    gate_rows = "".join(
+        "<li>" + html.escape(str(attempt.get("tier"))) + ": " + ", ".join(
+            f"{html.escape(str(gate.get('name')))}={'pass' if gate.get('passed') else 'fail'}"
+            for gate in (attempt.get("verification_gates") or [])
+        ) + "</li>"
+        for attempt in attempts if attempt.get("verification_gates")
+    )
+    gates_html = f'<div class="gate-results"><strong>Verification gates</strong><ul>{gate_rows}</ul></div>' if gate_rows else ""
+    return f"""
+  <h2>Analysis escalation</h2>
+  <div class="meta">{status} &middot; {len(attempts)} tier(s) attempted</div>
+  <div class="escalation" style="margin-bottom: 1.5rem;">{tiers_html}</div>
+  {gates_html}
+"""
+
+
 def render_timeline_html(trace_data: dict[str, Any]) -> str:
     """Render a self-contained HTML page visualizing a bisection trace as a
     colored timeline: green=pass, red=fail, amber=flaky, with escalation tiers
@@ -134,6 +169,8 @@ def render_timeline_html(trace_data: dict[str, Any]) -> str:
     font-size: 0.65rem; background: #2a2f3d; color: #8fd3ff; padding: 0.15rem 0.4rem;
     border-radius: 999px; white-space: nowrap;
   }}
+  .gate-results {{ margin: -0.5rem 0 1.5rem; color: #c7cbd1; font-size: 0.85rem; }}
+  .gate-results ul {{ margin: 0.35rem 0 0; padding-left: 1.25rem; }}
   details {{ margin-top: 2rem; }}
   summary {{ cursor: pointer; color: #9aa0a6; }}
   pre {{
@@ -157,6 +194,7 @@ def render_timeline_html(trace_data: dict[str, Any]) -> str:
   <div class="timeline">
     {segments_html}
   </div>
+  {_analysis_escalation_html(trace_data.get("analysis"))}
   <details>
     <summary>Raw JSON trace</summary>
     <pre>{trace_json}</pre>

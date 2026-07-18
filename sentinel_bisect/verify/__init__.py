@@ -1,3 +1,3 @@
-from .service import VerificationResult, verify_patch
+from .service import VerificationGate, VerificationResult, verify_patch
 
-__all__ = ["VerificationResult", "verify_patch"]
+__all__ = ["VerificationGate", "VerificationResult", "verify_patch"]

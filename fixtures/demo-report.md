@@ -9,7 +9,8 @@
 ```text
 PASS b39aec89a8ba  pass  (3 runs, retry 0)
 FAIL df0fa14841f0  fail  (3 runs, retry 0)
-FLAKY 1b1e9dca495f  flaky  (3 runs, retry 0)
+FLAKY 1b1e9dca495f  flaky  (15 runs, retry 2)
+      escalated: 3->flaky, 7->flaky, 15->flaky
 PASS bba11ea5357a  pass  (3 runs, retry 0)
       ^ substituted for flaky 1b1e9dca495f (routed around to keep searching)
 FAIL 4d55af94be70  fail  (3 runs, retry 0)

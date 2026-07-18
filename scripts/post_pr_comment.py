@@ -15,6 +15,24 @@ import subprocess
 from pathlib import Path
 
 
+_EXPLANATION_MAX_CHARS = 240
+
+
+def _truncate_explanation(explanation: str, max_chars: int = _EXPLANATION_MAX_CHARS) -> str:
+    """Derive a comment-sized summary from the full analysis explanation via simple
+    truncation rather than a second, separately-requested low-verbosity API call —
+    cheaper and deterministic for text that's already in hand (see DECISIONS.md).
+    Prefers cutting at the first sentence boundary; falls back to a hard char cap.
+    """
+    explanation = explanation.strip()
+    if len(explanation) <= max_chars:
+        return explanation
+    first_sentence_end = explanation.find(". ")
+    if 0 < first_sentence_end < max_chars:
+        return explanation[: first_sentence_end + 1]
+    return explanation[: max_chars - 1].rstrip() + "…"
+
+
 def _commit_subject(repo: Path, sha: str) -> str:
     result = subprocess.run(
         ["git", "-C", str(repo), "show", "-s", "--format=%s", sha],
@@ -40,6 +58,15 @@ def build_comment(trace: dict, repo: Path, run_url: str | None, artifact_name: s
     lines.append(
         f"Searched {len(steps)} decision point(s); {flaky_count} flaky, {substitution_count} routed around via substitution."
     )
+    analysis = trace.get("analysis") or {}
+    attempts = analysis.get("attempts") or []
+    if attempts:
+        final = attempts[-1]
+        explanation = final.get("explanation")
+        if explanation:
+            verdict = "verified fix" if final.get("verified") else "unverified — needs review"
+            lines.append("")
+            lines.append(f"**Analysis ({verdict}):** {_truncate_explanation(explanation)}")
     links = []
     if artifact_name:
         links.append(f"Full Markdown report, JSON trace, and HTML timeline are attached as the `{artifact_name}` workflow artifact.")

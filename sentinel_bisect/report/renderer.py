@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from sentinel_bisect.analysis import AnalysisResult
+from sentinel_bisect.analysis import AnalysisResult, EscalationOutcome
 from sentinel_bisect.orchestrator.engine import BisectResult
 from sentinel_bisect.verify import VerificationResult
 
 
-def render_markdown(result: BisectResult, analysis: AnalysisResult | None = None, verification: VerificationResult | None = None) -> str:
+def render_markdown(
+    result: BisectResult,
+    analysis: AnalysisResult | None = None,
+    verification: VerificationResult | None = None,
+    escalation: EscalationOutcome | None = None,
+) -> str:
     lines = ["# Sentinel Bisect report", "", f"## Confirmed introducing commit", "", f"`{result.culprit}`", "", "## Search timeline", "", "```text"]
     substituted = False
     for step in result.trace:
@@ -31,6 +36,32 @@ def render_markdown(result: BisectResult, analysis: AnalysisResult | None = None
         lines += ["The search routed around one or more persistently-flaky commits by substituting an adjacent commit as the decision point.", ""]
     if analysis:
         lines += ["## Causal explanation", "", analysis.explanation, "", "## Proposed patch", "", "```diff", analysis.patch or "No safe patch proposed.", "```", ""]
+    # Escalation attempts beyond a single tier 1 call are the interesting case — a
+    # tier-1-only run is already fully described by the sections above.
+    if escalation and len(escalation.attempts) > 1:
+        lines += ["## Analysis escalation", ""]
+        for attempt in escalation.attempts:
+            setting = f"effort={attempt.effort}" if attempt.effort else f"mode={attempt.mode}"
+            status = "verified" if attempt.verified else "failed"
+            line = f"- **{attempt.tier}** ({attempt.model}, {setting}): {status}"
+            if attempt.verification:
+                line += f" — {attempt.verification.message}"
+            if attempt.informed_by:
+                line += f" — informed by prior tier's failure: {attempt.informed_by}"
+            lines.append(line)
+        lines.append("")
+        if escalation.exhausted:
+            lines.append(f"All {len(escalation.attempts)} tier(s) exhausted without a verified patch.")
+        else:
+            lines.append(f"Resolved at **{escalation.final.tier}**.")
+        lines.append("")
     if verification:
         lines += ["## Verification", "", f"**{'Verified' if verification.verified else 'Not verified'}** — {verification.message}", ""]
+    if verification and verification.gates:
+        lines += ["| Gate | Result | Command |", "| --- | --- | --- |"]
+        lines.extend(
+            f"| {gate.name} | {'pass' if gate.passed else 'fail'} | `{gate.command}` |"
+            for gate in verification.gates
+        )
+        lines.append("")
     return "\n".join(lines)

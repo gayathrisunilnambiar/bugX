@@ -1,0 +1,14 @@
+.git
+.github
+.pytest_cache
+.readme-venv
+.venv
+__pycache__
+*.pyc
+*.egg-info
+sentinel-runs
+sentinel-report.md
+sentinel-trace.json
+fixtures/flaky-regression-demo
+fixtures/.sentinel-worktrees
+.env
